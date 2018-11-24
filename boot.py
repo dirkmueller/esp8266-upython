@@ -4,4 +4,5 @@
 import gc
 #import webrepl
 #webrepl.start()
+import boardsetup
 gc.collect()
