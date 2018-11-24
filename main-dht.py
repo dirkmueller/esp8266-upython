@@ -1,6 +1,5 @@
 import gc
 import sys
-import time
 
 if sys.implementation.name == 'micropython':
     import machine
@@ -13,6 +12,8 @@ if sys.implementation.name == 'micropython':
     dht_sensor = dht.DHT22(machine.Pin(13))
     rtc = machine.RTC()
 
+    machineid = machine.unique_id()
+
     # Enable suspending of CPU, we don't need PWM or I2S
     esp.sleep_type(esp.SLEEP_LIGHT)
     # Turn off access point
@@ -21,8 +22,10 @@ if sys.implementation.name == 'micropython':
 else:
     import socket as usocket
     import random
+    import time
     wlan = None
     rtc = None
+    machineid = 'host1'
 
 
 def get_measure():
@@ -34,17 +37,17 @@ def get_measure():
 
 
 desthost = 'air.dmllr.de'
-machineid = 'host1'
 
 
 def do_connect():
     if wlan is None:
         return
 
-    if wlan:
+    if not wlan.active():
         print('> Activating WLAN')
         wlan.active(True)
     if not wlan.isconnected():
+        print('> Connecting to WLAN')
         wlan.connect()
         while not wlan.isconnected():
             machine.idle()
@@ -90,9 +93,6 @@ def do_sleep():
     if rtc is None:
         time.sleep(sleeptime)
         return
-
-    if wlan:
-        wlan.active(False)
 
     rtc.alarm(0, sleeptime*1000)
     while(rtc.alarm_left()):
