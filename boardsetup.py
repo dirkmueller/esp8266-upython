@@ -2,11 +2,30 @@ import machine
 import esp
 import network
 
-if machine.cause() is machine.PWRON_RESET:
+def ntp_freshup():
+    import ntptime
+    ntptime.host = '172.22.222.1'
+    ntptime.settime()
+
+print('Board setup started')
+
+if machine.reset_cause() is not machine.DEEPSLEEP_RESET:
     # Disable AP
     network.WLAN(network.AP_IF).active(False)
     # Enable Sta WIFI
-    network.WLAN(network.STA_IF).active(True)
+    wlan = network.WLAN(network.STA_IF)
+    if not wlan.active():
+        print('> Activating WLAN')
+        wlan.active(True)
+    if not wlan.isconnected():
+        print('> Connecting to WLAN')
+        wlan.connect()
+        while not wlan.isconnected():
+            machine.idle()
+        print(' connected as:', wlan.ifconfig()[0])
     # Enable suspending of CPU, we don't need PWM or I2S
     esp.sleep_type(esp.SLEEP_LIGHT)
-    print('Board setup complete')
+
+    ntp_freshup()
+    import utime
+    print('> Board setup complete at ', utime.localtime())
