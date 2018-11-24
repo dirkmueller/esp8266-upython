@@ -1,17 +1,22 @@
 import gc
-import json
 import sys
 import time
 
 if sys.implementation.name == 'micropython':
     import machine
     import dht
+    import esp
     import network
     import usocket
 
     wlan = network.WLAN(network.STA_IF)
     dht_sensor = dht.DHT22(machine.Pin(13))
     rtc = machine.RTC()
+
+    # Enable suspending of CPU, we don't need PWM or I2S
+    esp.sleep_type(esp.SLEEP_LIGHT)
+    # Turn off access point
+    network.WLAN(network.AP_IF).active(False)
 
 else:
     import socket as usocket
@@ -27,8 +32,10 @@ def get_measure():
 
     return random.randint(5, 10), random.randint(40, 60)
 
+
 desthost = 'air.dmllr.de'
 machineid = 'host1'
+
 
 def do_connect():
     if wlan is None:
@@ -42,6 +49,7 @@ def do_connect():
         while not wlan.isconnected():
             machine.idle()
         print(' connected as:', wlan.ifconfig()[0])
+
 
 def send_measurement(temperature, humidity):
     if sys.implementation.name != 'micropython':
@@ -77,7 +85,7 @@ Content-Type: application/x-www-form-urlencoded
 
 
 def do_sleep():
-    sleeptime = 4 * 60 + 20
+    sleeptime = 3 * 60 + 20
 
     if rtc is None:
         time.sleep(sleeptime)
