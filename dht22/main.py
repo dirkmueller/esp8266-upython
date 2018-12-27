@@ -12,6 +12,8 @@ if sys.implementation.name == 'micropython':
 
     wlan = network.WLAN(network.STA_IF)
     dht_sensor = dht.DHT22(machine.Pin(13))
+    use_deep_sleep_pin = machine.Pin(14, machine.Pin.IN)
+    use_deep_sleep = use_deep_sleep_pin.value()
     rtc = machine.RTC()
 
     machineid = machine.unique_id()
@@ -28,7 +30,7 @@ else:
     wlan = None
     rtc = None
     machineid = 'host1'
-
+    use_deep_sleep = False
 
 def get_measure():
     if sys.implementation.name == 'micropython':
@@ -98,9 +100,15 @@ def get_ah(temperature, humidity):
 
 
 def do_sleep(sleeptime):
-
-    utime.sleep(sleeptime)
-    print('> Wakup from sleep')
+    if use_deep_sleep:
+        rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
+        rtc.alarm(rtc.ALARM0, sleeptime * 1000)
+        print('[%02d:%02d:%02d.%03d] ' % utime.localtime()[3:7],
+              'deep sleep for %d s ' % sleeptime)
+        machine.deepsleep()
+    else:
+        utime.sleep(sleeptime)
+        print('> Wakup from sleep')
     gc.collect()
 
 
@@ -121,17 +129,19 @@ def do_loop():
               ' %.01f C (%.01f %% rel.H %4.1f abs.H)' % sample)
 
         samples.append((utime.time(), sample))
-
-        if (hasattr(utime, 'sleep_ms')):
-            utime.sleep_ms(1000 - utime.localtime()[7] + 30 * 1000)
-
         print('# Samples: ', len(samples))
 
-        condition = (utime.time() - samples[0][0] < 10 * 60 and
-                     # less than 0.1 C difference
-                     abs(samples[0][1][0] - sample[0]) < 0.1 and
-                     # less than 0.3 % humidity difference
-                     abs(samples[0][1][1] - sample[1]) < 0.3)
+        if not use_deep_sleep:
+            if (hasattr(utime, 'sleep_ms')):
+                utime.sleep_ms(1000 - utime.localtime()[7] + 30 * 1000)
+
+            condition = (utime.time() - samples[0][0] < 10 * 60 and
+                         # less than 0.1 C difference
+                         abs(samples[0][1][0] - sample[0]) < 0.1 and
+                         # less than 0.3 % humidity difference
+                         abs(samples[0][1][1] - sample[1]) < 0.3)
+        else:
+            break
 
     do_connect()
     current_sample = samples.pop()
@@ -139,14 +149,21 @@ def do_loop():
     do_loop_samples = [current_sample]
 
 
+if sys.implementation.name == 'micropython':
+    if machine.reset_cause() == machine.DEEPSLEEP_RESET:
+        print('woke from a deep sleep')
+        # Give us some time to abort the code
+        utime.sleep(10)
+
 while True:
     do_loop()
 
     hour_of_day = utime.localtime()[3]
 
     if hour_of_day in range(0, 4):
-        do_sleep(7 * 60 + 20)
+        do_sleep(10 * 60)
     else:
-        do_sleep(2 * 60 + 10)
+        do_sleep(6 * 60)
+
 
     print('.')
