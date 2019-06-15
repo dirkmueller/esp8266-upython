@@ -17,9 +17,6 @@ if sys.implementation.name == 'micropython':
     rtc = machine.RTC()
 
     machineid = machine.unique_id()
-
-    # Enable suspending of CPU, we don't need PWM or I2S
-    esp.sleep_type(esp.SLEEP_LIGHT)
     # Turn off access point
     network.WLAN(network.AP_IF).active(False)
 
@@ -31,6 +28,7 @@ else:
     rtc = None
     machineid = 'host1'
     use_deep_sleep = False
+
 
 def get_measure():
     if sys.implementation.name == 'micropython':
@@ -150,10 +148,17 @@ def do_loop():
 
 
 if sys.implementation.name == 'micropython':
-    if machine.reset_cause() == machine.DEEPSLEEP_RESET:
-        print('woke from a deep sleep')
-        # Give us some time to abort the code
-        utime.sleep(10)
+    print('Waiting 10s')
+    # Give us some time to abort the code
+    utime.sleep(10)
+
+    # Warm up sensor
+    for i in range(1, 4):
+        try:
+            print('warmup', get_measure())
+            utime.sleep(2)
+        except:
+            pass
 
 while True:
     do_loop()

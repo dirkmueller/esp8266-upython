@@ -23,8 +23,8 @@ if machine.reset_cause() is not machine.DEEPSLEEP_RESET:
         while not wlan.isconnected():
             machine.idle()
         print(' connected as:', wlan.ifconfig()[0])
-    # Enable suspending of CPU, we don't need PWM or I2S
-    esp.sleep_type(esp.SLEEP_LIGHT)
+    # Enable suspending of CPU, we don't need WIFI all the time
+    #esp.sleep_type(esp.SLEEP_MODEM)
 
     ntp_freshup()
     import utime
