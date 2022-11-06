@@ -1,41 +1,41 @@
 import gc
+import machine
 import math
 import sys
+import usocket
+import utime
 
-if sys.implementation.name == 'micropython':
-    import machine
-    import dht
-    import esp
+use_deep_sleep = False
+
+try:
     import network
-    import usocket
-    import utime
-
-    wlan = network.WLAN(network.STA_IF)
+except ImportError:
+    dht_sensor = None
+    wlan = None
+    rtc = None
+    machineid = '<fake>'
+    import random
+else:
+    import dht
     dht_sensor = dht.DHT22(machine.Pin(13))
-    use_deep_sleep_pin = machine.Pin(14, machine.Pin.IN)
-    use_deep_sleep = use_deep_sleep_pin.value()
-    rtc = machine.RTC()
+    wlan = network.WLAN(network.STA_IF)
 
-    machineid = machine.unique_id()
     # Turn off access point
     network.WLAN(network.AP_IF).active(False)
 
-else:
-    import socket as usocket
-    import random
-    import time as utime
-    wlan = None
-    rtc = None
-    machineid = 'host1'
-    use_deep_sleep = False
+    use_deep_sleep_pin = machine.Pin(
+        14, mode=machine.Pin.IN, pull=machine.Pin.PULL_UP)
+    use_deep_sleep = not use_deep_sleep_pin.value()
+    rtc = machine.RTC()
+    machineid = machine.unique_id()
 
 
 def get_measure():
-    if sys.implementation.name == 'micropython':
+    if dht_sensor:
         dht_sensor.measure()
         return dht_sensor.temperature(), dht_sensor.humidity()
 
-    return random.randint(180, 220)/10, 42
+    return (random.getrandbits(5) + 180)/10, (random.getrandbits(4)+40)
 
 
 desthost = 'air.dmllr.de'
@@ -57,7 +57,7 @@ def do_connect():
 
 
 def send_measurement(temperature, humidity, abs_humidity):
-    if sys.implementation.name != 'micropython':
+    if wlan is None:
         print('Not sending')
         return
 
@@ -106,10 +106,18 @@ def do_sleep(sleeptime):
         print('[%02d:%02d:%02d.%03d] ' % utime.localtime()[3:7],
               'deep sleep for %d s ' % sleeptime)
         machine.deepsleep()
+        return
+
+    if wlan:
+        wlan.disconnect()
+        wlan.active(False)
+
+    if hasattr(machine, 'lightsleep'):
+        print(f'> Entering lightsleep for {sleeptime} s')
+        machine.lightsleep(sleeptime * 1000)
     else:
         utime.sleep(sleeptime)
-        print('> Wakup from sleep')
-    gc.collect()
+    print('> Wakup from sleep')
 
 
 do_loop_samples = []
@@ -132,8 +140,11 @@ def do_loop():
         print('# Samples: ', len(samples))
 
         if not use_deep_sleep:
-            if (hasattr(utime, 'sleep_ms')):
-                utime.sleep_ms(1000 - utime.localtime()[7] + 30 * 1000)
+            sample_interval_wait = 1000 - utime.localtime()[7] + 30 * 1000
+            if hasattr(machine, 'lightsleep'):
+                machine.lightsleep(sample_interval_wait)
+            elif hasattr(utime, 'sleep_ms'):
+                utime.sleep_ms(sample_interval_wait)
 
             condition = (utime.time() - samples[0][0] < 10 * 60 and
                          # less than 0.1 C difference
@@ -149,7 +160,7 @@ def do_loop():
     do_loop_samples = [current_sample]
 
 
-if sys.implementation.name == 'micropython':
+if 'ESP' in sys.implementation._machine:
     print('Waiting 5s')
     # Give us some time to abort the code
     utime.sleep(5)
@@ -172,4 +183,5 @@ while True:
     else:
         do_sleep(6 * 60)
 
+    gc.collect()
     print('.')
