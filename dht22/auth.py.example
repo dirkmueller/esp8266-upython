@@ -1,0 +1,2 @@
+desthost = 'some.host.name'
+desturl = '/some/url/write?db=dbname'

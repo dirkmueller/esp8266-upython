@@ -1,1 +1,2 @@
+import boardsetup
 import sensor
