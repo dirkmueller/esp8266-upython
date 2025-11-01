@@ -16,6 +16,8 @@ except ImportError:
     machineid = '<fake>'
     import random
 else:
+    import time
+
     import dht
 
     dht_sensor = dht.DHT22(machine.Pin(13))
@@ -66,8 +68,13 @@ class Sensor:
         if not wlan.isconnected():
             print('> Connecting to WLAN')
             wlan.connect()
+            wlan_start = time.ticks_ms()
             while not wlan.isconnected():
                 machine.idle()
+                if time.ticks_diff(time.ticks_ms(), wlan_start) > 30000:
+                    print(' * did not connect for 30s')
+                    machine.reset()
+
             print(' connected as:', wlan.ifconfig()[0])
 
     def send_measurement(self, temperature, humidity, abs_humidity) -> None:
@@ -127,33 +134,27 @@ Content-Type: application/x-www-form-urlencoded
 
     def do_loop(self) -> None:
         samples = self.do_loop_samples
-        condition = True
-        while condition:
+        while True:
             temp, humidity = self.get_measure()
             abs_humidity: float = get_ah(temp, humidity)
-
             sample = (temp, humidity, abs_humidity)
+            samples.append((utime.time(), sample))
 
             print(
                 '[%02d:%02d:%02d.%03d]' % utime.localtime()[3:7],
                 ' %.01f C (%.01f %% rel.H %4.1f abs.H)' % sample,
             )
-
-            samples.append((utime.time(), sample))
             print(f'# Samples: {len(samples)}')
 
             sample_interval_wait = 1000 - utime.localtime()[7] + 30 * 1000
             self.do_sleep(sample_interval_wait)
 
-            condition = (
-                utime.time() - samples[0][0] < 15 * 60
-                and
-                # less than 0.1 C difference
-                abs(samples[0][1][0] - sample[0]) < 0.1
-                and
-                # less than 0.3 % humidity difference
-                abs(samples[0][1][1] - sample[1]) < 0.3
-            )
+            if utime.time() - samples[0][0] > 15 * 60:
+                break
+            if abs(samples[0][1][0] - temp) > 0.1:
+                break
+            if abs(samples[0][1][1] - humidity) > 0.3:
+                break
 
         self.ensure_connected()
         current_sample = samples.pop()
