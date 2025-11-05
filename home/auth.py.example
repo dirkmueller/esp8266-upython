@@ -1,0 +1,6 @@
+# WLAN configuration
+wlan_name = 'wlan'
+wlan_pass = 'password'
+
+desthost = 'some.host.name'
+desturl = '/some/url/write?db=dbname'
